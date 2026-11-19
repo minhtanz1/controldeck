@@ -1,0 +1,2270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>ControlDeck PocketPad</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    /* Disable default gestures only on game controller touch surfaces */
+    .gamepad-stage,
+    .trackpad-surface,
+    .tool-icon-btn,
+    .mode-btn,
+    .shoulder-btn,
+    .dpad-btn,
+    .face-btn,
+    .stick-base,
+    .menu-btn,
+    .drag-lock-btn,
+    .mouse-click-btn {
+      touch-action: none;
+    }
+    :root {
+      --bg: #090c10;
+      --surface: #121722;
+      --surface-elevated: #1a2232;
+      --surface-hover: #222d42;
+      --border: rgba(255, 255, 255, 0.09);
+      --border-focus: rgba(0, 229, 255, 0.4);
+      --accent: #00e5ff;
+      --accent-glow: rgba(0, 229, 255, 0.25);
+      --accent-muted: rgba(0, 229, 255, 0.12);
+      --danger: #ef4444;
+      --success: #22c55e;
+      --text: #f1f5f9;
+      --text-muted: #8e9bb0;
+      --control-scale: 1;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--surface-hover); border-radius: 2px; }
+
+    /* Top Bar */
+    .top-bar {
+      height: 46px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      flex-shrink: 0;
+      z-index: 50;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .logo-dot.connected {
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+    .app-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: #fff;
+    }
+    .top-right-tools {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .ping-badge {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+      margin-right: 4px;
+    }
+    .tool-icon-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 6px;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tool-icon-btn:active, .tool-icon-btn.active {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-muted);
+    }
+    .tool-icon-btn svg {
+      width: 17px;
+      height: 17px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Mode Nav */
+    .mode-nav {
+      display: flex;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 3px 6px;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .mode-btn {
+      flex: 1;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 0;
+      border-radius: 5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .mode-btn.active {
+      background: var(--surface-elevated);
+      color: var(--accent);
+      border-color: rgba(0, 229, 255, 0.25);
+    }
+    .mode-btn svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+    }
+
+    /* Stages */
+    .stage {
+      flex: 1;
+      display: none;
+      height: calc(100vh - 84px);
+      position: relative;
+      overflow: hidden;
+    }
+    .stage.active {
+      display: flex;
+    }
+
+    /* ================= 1. GAMEPAD MODE ================= */
+    .gamepad-stage {
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 10px;
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Floating Edit Layout Banner */
+    .layout-edit-bar {
+      position: absolute;
+      top: 6px;
+      left: 10px;
+      right: 10px;
+      background: rgba(18, 23, 34, 0.95);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 8px 12px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 90;
+      box-shadow: 0 4px 16px rgba(0, 229, 255, 0.2);
+    }
+    .edit-layout-active .layout-edit-bar {
+      display: flex;
+    }
+    .layout-edit-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .layout-edit-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .layout-bar-btn {
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid var(--border);
+    }
+    .layout-bar-btn.save {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+    }
+    .layout-bar-btn.reset {
+      background: transparent;
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    /* Clusters visual style in Edit Mode */
+    .edit-layout-active [data-cluster] {
+      outline: 2px dashed var(--accent) !important;
+      outline-offset: 4px;
+      background: rgba(0, 229, 255, 0.08) !important;
+      cursor: grab !important;
+    }
+    .edit-layout-active [data-cluster]:active {
+      cursor: grabbing !important;
+      outline-color: #fff !important;
+      background: rgba(0, 229, 255, 0.18) !important;
+    }
+
+    /* Bumpers and Progressive Triggers */
+    .bumpers-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+      flex-shrink: 0;
+      width: 100%;
+      transition: transform 0.05s ease-out;
+    }
+    .shoulder-group {
+      display: flex;
+      gap: 6px;
+      flex: 1;
+    }
+    .shoulder-btn {
+      flex: 1;
+      height: 44px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-weight: 700;
+      font-size: 13px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .shoulder-btn:active, .shoulder-btn.active {
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    /* Progressive Trigger Gauge */
+    .trigger-btn {
+      position: relative;
+    }
+    .trigger-gauge {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 0%;
+      background: linear-gradient(to top, rgba(0, 229, 255, 0.45), rgba(0, 229, 255, 0.18));
+      pointer-events: none;
+      transition: height 0.05s ease-out;
+    }
+    .trigger-text {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .trigger-pct {
+      font-size: 10px;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Center Utility Row (Back, Drag Lock, Start) */
+    .center-menu-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      margin: 4px 0;
+      flex-shrink: 0;
+    }
+    .menu-btn {
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .menu-btn:active {
+      background: var(--surface-hover);
+      color: #fff;
+    }
+    .drag-lock-btn {
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .drag-lock-btn.active {
+      background: rgba(0, 229, 255, 0.18);
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
+    }
+    .drag-lock-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Controls Main Area */
+    .controls-main-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex: 1;
+      width: 100%;
+      padding: 0 6px;
+    }
+
+    /* D-PAD */
+    .dpad-container {
+      width: 140px;
+      height: 140px;
+      position: relative;
+      flex-shrink: 0;
+      transition: transform 0.05s ease-out;
+    }
+    .dpad-btn {
+      position: absolute;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .dpad-btn:active, .dpad-btn.active {
+      background: var(--accent);
+      color: #000;
+    }
+    .dpad-up { top: 0; left: 46px; width: 48px; height: 48px; border-radius: 7px 7px 0 0; }
+    .dpad-down { bottom: 0; left: 46px; width: 48px; height: 48px; border-radius: 0 0 7px 7px; }
+    .dpad-left { top: 46px; left: 0; width: 48px; height: 48px; border-radius: 7px 0 0 7px; }
+    .dpad-right { top: 46px; right: 0; width: 48px; height: 48px; border-radius: 0 7px 7px 0; }
+    .dpad-center { top: 46px; left: 46px; width: 48px; height: 48px; background: var(--surface-elevated); }
+
+    /* FACE BUTTONS (ABXY) */
+    .face-container {
+      width: 140px;
+      height: 140px;
+      position: relative;
+      flex-shrink: 0;
+      transition: transform 0.05s ease-out;
+    }
+    .face-btn {
+      position: absolute;
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .face-btn:active, .face-btn.active {
+      transform: scale(0.92);
+      filter: brightness(1.3);
+    }
+    .face-y { top: 0; left: 47px; color: #eab308; border-color: #eab308; }
+    .face-a { bottom: 0; left: 47px; color: #22c55e; border-color: #22c55e; }
+    .face-x { top: 47px; left: 0; color: #3b82f6; border-color: #3b82f6; }
+    .face-b { top: 47px; right: 0; color: #ef4444; border-color: #ef4444; }
+
+    /* VIRTUAL JOYSTICKS */
+    .sticks-row {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      width: 100%;
+      padding-bottom: 6px;
+      flex-shrink: 0;
+    }
+    .stick-base {
+      width: 112px;
+      height: 112px;
+      border-radius: 50%;
+      background: #0f141f;
+      border: 2px solid var(--border);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+      flex-shrink: 0;
+      transition: transform 0.05s ease-out;
+    }
+    .stick-puck {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #222d42, #141b27);
+      border: 2px solid var(--border);
+      position: absolute;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 800;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .stick-puck.dragging {
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    /* Lefty Swap */
+    .layout-lefty .controls-main-row {
+      flex-direction: row-reverse;
+    }
+    .layout-lefty .sticks-row {
+      flex-direction: row-reverse;
+    }
+
+    /* Sizing Scales */
+    .scale-small { --control-scale: 0.85; }
+    .scale-medium { --control-scale: 1; }
+    .scale-large { --control-scale: 1.15; }
+
+    .scale-small .dpad-container, .scale-small .face-container { transform: scale(0.85); }
+    .scale-large .dpad-container, .scale-large .face-container { transform: scale(1.12); }
+    .scale-small .stick-base { width: 96px; height: 96px; }
+    .scale-large .stick-base { width: 126px; height: 126px; }
+
+    /* ================= RESPONSIVE ORIENTATION ================= */
+    @media (orientation: portrait) {
+      .gamepad-stage:not(.has-custom-layout) {
+        padding: 8px 10px;
+        gap: 4px;
+      }
+      .gamepad-stage:not(.has-custom-layout) .controls-main-row {
+        margin: 6px 0;
+      }
+      .gamepad-stage:not(.has-custom-layout) .sticks-row {
+        padding-bottom: 12px;
+        margin-top: 4px;
+      }
+    }
+
+    @media (orientation: landscape) {
+      .gamepad-stage:not(.has-custom-layout) {
+        padding: 6px 14px;
+      }
+      .gamepad-stage:not(.has-custom-layout) .bumpers-row {
+        margin-bottom: 2px;
+      }
+      .gamepad-stage:not(.has-custom-layout) .sticks-row {
+        padding-bottom: 2px;
+      }
+    }
+
+    /* ================= 2. TRACKPAD & MOUSE ================= */
+    .mouse-stage {
+      flex-direction: column;
+      padding: 10px;
+      height: calc(100vh - 84px);
+      position: relative;
+    }
+    .trackpad-surface {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .trackpad-surface.dragging-active {
+      border-color: var(--accent);
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.35);
+    }
+    .trackpad-hint {
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.6;
+      text-align: center;
+      pointer-events: none;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    .trackpad-surface.dragging-active .trackpad-hint {
+      opacity: 0.2;
+    }
+
+    /* Trackpad Drag Mode Badge */
+    .trackpad-drag-badge {
+      position: absolute;
+      top: 14px;
+      padding: 6px 16px;
+      background: rgba(0, 229, 255, 0.18);
+      border: 1px solid var(--accent);
+      border-radius: 20px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      pointer-events: none;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 12px rgba(0, 229, 255, 0.3);
+      animation: pulseGlow 1.5s infinite;
+    }
+    .trackpad-drag-badge.active {
+      display: flex;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.75; }
+    }
+
+    .mouse-buttons-row {
+      display: flex;
+      height: 60px;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .mouse-click-btn {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .mouse-click-btn:active {
+      background: var(--accent);
+      color: #000;
+    }
+    .mouse-middle-btn {
+      flex: 0.6;
+      font-size: 12px;
+    }
+
+    /* ================= 3. PROFILE-DRIVEN ACTION DECK ================= */
+    .deck-stage {
+      flex-direction: column;
+      padding: 12px;
+      gap: 12px;
+      overflow-y: auto;
+      height: calc(100vh - 84px);
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y !important;
+    }
+    .deck-profile-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .deck-profile-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+    }
+    .deck-profile-tag {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+    .profile-select {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 10px;
+      border-radius: 6px;
+      outline: none;
+      width: 100%;
+      cursor: pointer;
+    }
+    .profile-select:focus {
+      border-color: var(--accent);
+    }
+    .deck-refresh-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .deck-refresh-btn:active {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    .deck-refresh-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+    .text-input-row {
+      display: flex;
+      gap: 8px;
+    }
+    .typing-input {
+      flex: 1;
+      height: 42px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+    }
+    .typing-input:focus {
+      border-color: var(--accent);
+    }
+    .send-text-btn {
+      padding: 0 16px;
+      background: var(--accent);
+      color: #000;
+      font-weight: 700;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .dynamic-deck-container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-bottom: 24px;
+    }
+    .deck-category-block {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .deck-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-top: 4px;
+      padding-left: 2px;
+    }
+    .macro-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .macro-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: transform 0.08s ease, border-color 0.15s ease, background 0.15s ease;
+      touch-action: manipulation;
+    }
+    .macro-btn:active {
+      transform: scale(0.97);
+      border-color: var(--accent);
+      background: var(--surface-elevated);
+    }
+    .macro-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.25;
+      word-break: break-word;
+    }
+    .macro-key {
+      font-size: 11px;
+      color: var(--accent);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .deck-empty-state {
+      padding: 36px 16px;
+      text-align: center;
+      background: var(--surface);
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .deck-empty-state svg {
+      width: 36px;
+      height: 36px;
+      stroke: var(--text-muted);
+    }
+    .deck-empty-state .empty-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .deck-empty-state .empty-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      max-width: 320px;
+      line-height: 1.4;
+    }
+
+    /* ================= MODAL / DRAWER: LAYOUT SETTINGS ================= */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      touch-action: pan-y;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .drawer-panel {
+      width: 100%;
+      max-width: 500px;
+      max-height: 85vh;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-radius: 14px 14px 0 0;
+      display: flex;
+      flex-direction: column;
+      animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      touch-action: pan-y !important;
+      overflow: hidden;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    .drawer-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .drawer-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .drawer-close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px;
+    }
+    .drawer-content,
+    .drawer-content * {
+      touch-action: pan-y !important;
+    }
+    .drawer-content {
+      padding: 16px;
+      padding-bottom: 100px !important;
+      overflow-y: scroll !important;
+      -webkit-overflow-scrolling: touch !important;
+      overscroll-behavior-y: contain;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .setting-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .setting-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    /* Drag & Drop Layout Action Button */
+    .action-highlight-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px;
+      background: var(--accent-muted);
+      border: 1px solid var(--accent);
+      border-radius: 7px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .action-highlight-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .preset-selector {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+    .preset-chip {
+      padding: 8px 10px;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+    }
+    .preset-chip.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-muted);
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 13px;
+    }
+    .toggle-switch {
+      position: relative;
+      width: 40px;
+      height: 22px;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider-track {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      transition: .2s;
+    }
+    .slider-track:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 2px;
+      bottom: 2px;
+      background-color: var(--text-muted);
+      border-radius: 50%;
+      transition: .2s;
+    }
+    input:checked + .slider-track {
+      background-color: var(--accent);
+    }
+    input:checked + .slider-track:before {
+      transform: translateX(18px);
+      background-color: #000;
+    }
+    .segmented-control {
+      display: flex;
+      background: var(--surface-elevated);
+      border-radius: 6px;
+      padding: 3px;
+      gap: 3px;
+    }
+    .segmented-btn {
+      flex: 1;
+      padding: 6px 0;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .segmented-btn.active {
+      background: var(--surface-hover);
+      color: #fff;
+    }
+    .reset-defaults-btn {
+      margin-top: 8px;
+      padding: 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--danger);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <header class="top-bar">
+    <div class="brand">
+      <div id="statusDot" class="logo-dot"></div>
+      <span class="app-title">PocketPad</span>
+    </div>
+
+    <div class="top-right-tools">
+      <span id="pingLabel" class="ping-badge">Connecting...</span>
+      
+      <!-- Rotate / Orientation Toggle -->
+      <button class="tool-icon-btn" onclick="toggleOrientation()" title="Xoay dọc/ngang">
+        <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+      </button>
+
+      <!-- Layout Settings -->
+      <button class="tool-icon-btn" onclick="openLayoutDrawer()" title="Tùy chỉnh Layout">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+
+      <!-- Fullscreen Toggle -->
+      <button id="fsBtn" class="tool-icon-btn" onclick="toggleFullscreen()" title="Toàn màn hình">
+        <svg id="fsIcon" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- MODE TABS -->
+  <nav class="mode-nav">
+    <button class="mode-btn active" onclick="setMode('gamepad')">
+      <svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="6"/><circle cx="8" cy="12" r="2"/><path d="M15 11h2"/><path d="M16 10v2"/></svg>
+      Gamepad
+    </button>
+    <button class="mode-btn" onclick="setMode('mouse')">
+      <svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="7"/><path d="M12 6v4"/></svg>
+      Trackpad
+    </button>
+    <button class="mode-btn" onclick="setMode('deck')">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h.01M12 8h.01M17 8h.01M7 12h.01M12 12h.01M17 12h.01M7 16h10"/></svg>
+      Action Deck
+    </button>
+  </nav>
+
+  <!-- ================= STAGE 1: VIRTUAL GAMEPAD ================= -->
+  <div id="gamepadStage" class="stage gamepad-stage active">
+    
+    <!-- Floating Edit Layout Banner -->
+    <div id="layoutEditBar" class="layout-edit-bar">
+      <div class="layout-edit-info">
+        <span class="layout-edit-title">KÉO THẢ PHÍM THEO Ý BẠN</span>
+      </div>
+      <div class="layout-edit-actions">
+        <button class="layout-bar-btn reset" onclick="resetCustomPositions()">Đặt lại</button>
+        <button class="layout-bar-btn save" onclick="exitLayoutEditMode(true)">Lưu Xong</button>
+      </div>
+    </div>
+
+    <!-- Shoulder & Progressive Trigger Row -->
+    <div class="bumpers-row" id="shouldersCluster" data-cluster="shoulders" data-cluster-name="Triggers">
+      <div class="shoulder-group">
+        <button class="shoulder-btn trigger-btn" id="ltBtn" data-trigger="lt">
+          <div class="trigger-gauge" id="ltGauge"></div>
+          <span class="trigger-text">LT <span class="trigger-pct" id="ltPct">0%</span></span>
+        </button>
+        <button class="shoulder-btn" data-btn="LB">LB</button>
+      </div>
+
+      <div class="shoulder-group">
+        <button class="shoulder-btn" data-btn="RB">RB</button>
+        <button class="shoulder-btn trigger-btn" id="rtBtn" data-trigger="rt">
+          <div class="trigger-gauge" id="rtGauge"></div>
+          <span class="trigger-text">RT <span class="trigger-pct" id="rtPct">0%</span></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Center Utility Row (Back, Drag Lock, Start) -->
+    <div class="center-menu-row" id="menuCluster" data-cluster="menu" data-cluster-name="Menu">
+      <button class="menu-btn" data-btn="Back">BACK</button>
+      
+      <!-- Node Drag Lock Toggle -->
+      <button id="dragLockBtn" class="drag-lock-btn" onclick="toggleDragLock()" title="Giữ chuột trái để kéo thả (Drag Lock)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l4-4 4 4"/><path d="M9 5v14"/><path d="M19 15l-4 4-4-4"/><path d="M15 19V5"/></svg>
+        <span id="dragLockLabel">DRAG OFF</span>
+      </button>
+
+      <button class="menu-btn" data-btn="Start">START</button>
+    </div>
+
+    <!-- Controls Main Row (D-Pad & Face Buttons) -->
+    <div class="controls-main-row" id="mainControlsRow">
+      <!-- D-PAD -->
+      <div class="dpad-container" id="dpadCluster" data-cluster="dpad" data-cluster-name="D-Pad">
+        <button class="dpad-btn dpad-up" data-btn="DPadUp">▲</button>
+        <button class="dpad-btn dpad-left" data-btn="DPadLeft">◀</button>
+        <div class="dpad-center"></div>
+        <button class="dpad-btn dpad-right" data-btn="DPadRight">▶</button>
+        <button class="dpad-btn dpad-down" data-btn="DPadDown">▼</button>
+      </div>
+
+      <!-- FACE BUTTONS (ABXY) -->
+      <div class="face-container" id="faceCluster" data-cluster="face" data-cluster-name="ABXY">
+        <button class="face-btn face-y" data-btn="Y">Y</button>
+        <button class="face-btn face-x" data-btn="X">X</button>
+        <button class="face-btn face-b" data-btn="B">B</button>
+        <button class="face-btn face-a" data-btn="A">A</button>
+      </div>
+    </div>
+
+    <!-- Dual Virtual Joysticks Row -->
+    <div class="sticks-row" id="sticksCluster">
+      <div class="stick-base" id="leftStickBase" data-cluster="leftStick" data-cluster-name="Cần Trái">
+        <div class="stick-puck" id="leftStickPuck">LS</div>
+      </div>
+      <div class="stick-base" id="rightStickBase" data-cluster="rightStick" data-cluster-name="Cần Phải">
+        <div class="stick-puck" id="rightStickPuck">RS</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================= STAGE 2: TRACKPAD & MOUSE ================= -->
+  <div id="mouseStage" class="stage mouse-stage">
+    <div id="trackpad" class="trackpad-surface">
+      <!-- Drag Mode Active Badge -->
+      <div id="trackpadDragBadge" class="trackpad-drag-badge">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 9l4-4 4 4"/><path d="M9 5v14"/><path d="M19 15l-4 4-4-4"/><path d="M15 19V5"/></svg>
+        <span>ĐANG GIỮ CHUỘT (Rê để kéo thả, buông để rơi)</span>
+      </div>
+
+      <div class="trackpad-hint" id="trackpadHint">
+        1 Ngón Rê: Di chuyển trỏ chuột<br>
+        1 Ngón Chạm: Click chuột trái<br>
+        <strong>Nhấn giữ 2s: Chuyển sang Giữ Chuột & Kéo Thả (Buông tay là rơi)</strong><br>
+        2 Ngón Chạm: Chuột phải • 2 Ngón Rê: Cuộn / Phóng to bản đồ
+      </div>
+    </div>
+    <div class="mouse-buttons-row">
+      <button class="mouse-click-btn" id="mouseLeft">LEFT</button>
+      <button class="mouse-click-btn mouse-middle-btn" id="mouseMiddle">MID</button>
+      <button class="mouse-click-btn" id="mouseRight">RIGHT</button>
+    </div>
+  </div>
+
+  <!-- ================= STAGE 3: ACTION DECK ================= -->
+  <div id="deckStage" class="stage deck-stage">
+    <!-- Active Profile Selector & Status Banner -->
+    <div class="deck-profile-bar">
+      <div class="deck-profile-meta">
+        <span class="deck-profile-tag">ACTIVE PROFILE</span>
+        <select id="profileDropdown" class="profile-select" onchange="switchProfileFromDeck(this.value)">
+          <option value="">Đang kết nối PC...</option>
+        </select>
+      </div>
+      <button class="deck-refresh-btn" onclick="requestProfileSync()" title="Đồng bộ Profile">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+      </button>
+    </div>
+
+    <!-- Quick Text Input to Active PC App -->
+    <div class="text-input-row">
+      <input type="text" id="textInput" class="typing-input" placeholder="Gõ văn bản gửi trực tiếp tới máy tính...">
+      <button class="send-text-btn" onclick="sendText()">Gửi</button>
+    </div>
+
+    <!-- Dynamic Action Deck Grid Container -->
+    <div id="dynamicDeckGrid" class="dynamic-deck-container">
+      <div class="deck-empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="4" width="18" height="16" rx="2"/>
+          <path d="M7 8h.01M12 8h.01M17 8h.01M7 12h.01M12 12h.01M17 12h.01M7 16h10"/>
+        </svg>
+        <div class="empty-title">Đang đồng bộ Action Deck...</div>
+        <div class="empty-desc">Đang tải cấu hình phím tắt và macro từ profile máy tính.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= LAYOUT SETTINGS DRAWER ================= -->
+  <div id="layoutModal" class="modal-overlay" onclick="closeLayoutDrawer(event)">
+    <div class="drawer-panel" onclick="event.stopPropagation()">
+      <div class="drawer-header">
+        <span class="drawer-title">Tùy chỉnh Giao diện Mobile</span>
+        <button class="drawer-close-btn" onclick="closeLayoutDrawer()">✕</button>
+      </div>
+
+      <div class="drawer-content">
+        <!-- Visual Drag & Drop Layout Button -->
+        <button class="action-highlight-btn" onclick="enterLayoutEditMode()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l4-4 4 4"/><path d="M9 5v14"/><path d="M19 15l-4 4-4-4"/><path d="M15 19V5"/></svg>
+          Chỉnh Vị Trí Các Phím (Kéo Thả Trực Quan)
+        </button>
+
+        <!-- Mouse Speed Sensitivity Slider -->
+        <div class="setting-group">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span class="setting-label">Độ nhạy tốc độ chuột (Sensitivity)</span>
+            <span id="mouseSensVal" style="font-size:12px; color:var(--accent); font-weight:700; font-variant-numeric:tabular-nums;">1.7x</span>
+          </div>
+          <input
+            type="range"
+            id="mouseSensSlider"
+            min="0.5"
+            max="3.5"
+            step="0.1"
+            value="1.7"
+            style="width:100%; accent-color:var(--accent); cursor:pointer; height:6px; background:var(--surface-elevated); border-radius:3px; outline:none;"
+            oninput="setMouseSensitivity(parseFloat(this.value))"
+          />
+          <div class="segmented-control" style="margin-top:2px;">
+            <button class="segmented-btn" id="sensSlow" onclick="setMouseSensitivity(0.9)">Chậm (0.9x)</button>
+            <button class="segmented-btn active" id="sensNormal" onclick="setMouseSensitivity(1.7)">Chuẩn (1.7x)</button>
+            <button class="segmented-btn" id="sensFast" onclick="setMouseSensitivity(2.6)">Nhanh (2.6x)</button>
+          </div>
+        </div>
+
+        <!-- Trackpad Hold-to-Drag Delay -->
+        <div class="setting-group">
+          <span class="setting-label">Thời gian giữ để Kéo Thả trên Trackpad</span>
+          <div class="segmented-control">
+            <button class="segmented-btn" id="tpDelay15" onclick="setTpDragDelay(1500)">1.5 Giây</button>
+            <button class="segmented-btn active" id="tpDelay20" onclick="setTpDragDelay(2000)">2.0 Giây (Chuẩn)</button>
+            <button class="segmented-btn" id="tpDelay25" onclick="setTpDragDelay(2500)">2.5 Giây</button>
+          </div>
+        </div>
+
+        <!-- Layout Presets -->
+        <div class="setting-group">
+          <span class="setting-label">Preset Bố Cục</span>
+          <div class="preset-selector">
+            <button class="preset-chip active" id="presetWME" onclick="applyPreset('wme')">Editor Compact</button>
+            <button class="preset-chip" id="presetStandard" onclick="applyPreset('standard')">Full Gamepad</button>
+            <button class="preset-chip" id="presetSplit" onclick="applyPreset('split')">Trackpad Combo</button>
+            <button class="preset-chip" id="presetMinimal" onclick="applyPreset('minimal')">Minimal</button>
+          </div>
+        </div>
+
+        <!-- Left Stick Drag Option -->
+        <div class="setting-group">
+          <span class="setting-label">Left Stick Drag (Kéo thả chuột)</span>
+          <div class="segmented-control">
+            <button class="segmented-btn active" id="dragOptNone" onclick="setStickDragMode('none')">Normal</button>
+            <button class="segmented-btn" id="dragOptLeft" onclick="setStickDragMode('left')">Auto Drag Left</button>
+            <button class="segmented-btn" id="dragOptRight" onclick="setStickDragMode('right')">Auto Pan Right</button>
+          </div>
+        </div>
+
+        <!-- Trigger Ramp Speed -->
+        <div class="setting-group">
+          <span class="setting-label">Tốc độ Ramp Trigger (LT / RT)</span>
+          <div class="segmented-control">
+            <button class="segmented-btn" id="rampFast" onclick="setTriggerRamp(350)">Nhanh (350ms)</button>
+            <button class="segmented-btn active" id="rampNormal" onclick="setTriggerRamp(700)">Chuẩn (700ms)</button>
+            <button class="segmented-btn" id="rampSlow" onclick="setTriggerRamp(1200)">Chậm (1.2s)</button>
+          </div>
+        </div>
+
+        <!-- Sizing Scale -->
+        <div class="setting-group">
+          <span class="setting-label">Kích thước nút bấm</span>
+          <div class="segmented-control">
+            <button class="segmented-btn" id="scaleSmall" onclick="setScale('small')">Nhỏ</button>
+            <button class="segmented-btn active" id="scaleMedium" onclick="setScale('medium')">Vừa</button>
+            <button class="segmented-btn" id="scaleLarge" onclick="setScale('large')">Lớn</button>
+          </div>
+        </div>
+
+        <!-- Handedness -->
+        <div class="setting-group">
+          <div class="toggle-row">
+            <span>Đổi tay trái / phải (Lefty mode)</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="leftyToggle" onchange="toggleLefty(this.checked)">
+              <span class="slider-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Module Toggles -->
+        <div class="setting-group">
+          <span class="setting-label">Ẩn / Hiện Cụm Điều Khiển</span>
+          <div class="toggle-row">
+            <span>Triggers & Shoulders (LT, LB, RB, RT)</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="visShoulders" checked onchange="toggleModuleVis('shouldersCluster', this.checked)">
+              <span class="slider-track"></span>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <span>D-Pad</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="visDpad" checked onchange="toggleModuleVis('dpadCluster', this.checked)">
+              <span class="slider-track"></span>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <span>Nút Mặt ABXY</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="visFace" checked onchange="toggleModuleVis('faceCluster', this.checked)">
+              <span class="slider-track"></span>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <span>Cần Analog (Thumbsticks)</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="visSticks" checked onchange="toggleModuleVis('sticksCluster', this.checked)">
+              <span class="slider-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <button class="reset-defaults-btn" onclick="resetDefaultLayout()">Khôi phục Mặc định Toàn bộ</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State & Preferences
+    const STORAGE_KEY = "controldeck_mobile_settings";
+    let settings = {
+      preset: "wme",
+      scale: "medium",
+      lefty: false,
+      stickDragMode: "none",
+      triggerRampMs: 700,
+      tpDragDelayMs: 2000,
+      mouseSensitivity: 1.7,
+      visShoulders: true,
+      visDpad: true,
+      visFace: true,
+      visSticks: true,
+      customPositions: null, // { [clusterName]: { xPct, yPct } }
+    };
+
+    function loadSettings() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          settings = { ...settings, ...JSON.parse(saved) };
+        }
+      } catch (_) {}
+      applyAllSettings();
+    }
+
+    function saveSettings() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      } catch (_) {}
+    }
+
+    function applyAllSettings() {
+      // Scale
+      document.body.classList.remove("scale-small", "scale-medium", "scale-large");
+      document.body.classList.add(`scale-${settings.scale}`);
+      document.querySelectorAll("[id^=scale]").forEach(b => b.classList.remove("active"));
+      const scaleBtn = document.getElementById(`scale${settings.scale.charAt(0).toUpperCase() + settings.scale.slice(1)}`);
+      if (scaleBtn) scaleBtn.classList.add("active");
+
+      // Lefty
+      if (settings.lefty) {
+        document.body.classList.add("layout-lefty");
+      } else {
+        document.body.classList.remove("layout-lefty");
+      }
+      const leftyBox = document.getElementById("leftyToggle");
+      if (leftyBox) leftyBox.checked = settings.lefty;
+
+      // Visibility
+      toggleModuleVis("shouldersCluster", settings.visShoulders, false);
+      toggleModuleVis("dpadCluster", settings.visDpad, false);
+      toggleModuleVis("faceCluster", settings.visFace, false);
+      toggleModuleVis("sticksCluster", settings.visSticks, false);
+
+      const vs = document.getElementById("visShoulders"); if (vs) vs.checked = settings.visShoulders;
+      const vd = document.getElementById("visDpad"); if (vd) vd.checked = settings.visDpad;
+      const vf = document.getElementById("visFace"); if (vf) vf.checked = settings.visFace;
+      const vt = document.getElementById("visSticks"); if (vt) vt.checked = settings.visSticks;
+
+      // Drag option
+      document.querySelectorAll("[id^=dragOpt]").forEach(b => b.classList.remove("active"));
+      const dragBtn = document.getElementById(`dragOpt${settings.stickDragMode.charAt(0).toUpperCase() + settings.stickDragMode.slice(1)}`);
+      if (dragBtn) dragBtn.classList.add("active");
+
+      // Ramp option
+      document.querySelectorAll("[id^=ramp]").forEach(b => b.classList.remove("active"));
+      if (settings.triggerRampMs <= 400) document.getElementById("rampFast")?.classList.add("active");
+      else if (settings.triggerRampMs >= 1000) document.getElementById("rampSlow")?.classList.add("active");
+      else document.getElementById("rampNormal")?.classList.add("active");
+
+      // Trackpad hold delay
+      document.querySelectorAll("[id^=tpDelay]").forEach(b => b.classList.remove("active"));
+      if (settings.tpDragDelayMs <= 1600) document.getElementById("tpDelay15")?.classList.add("active");
+      else if (settings.tpDragDelayMs >= 2400) document.getElementById("tpDelay25")?.classList.add("active");
+      else document.getElementById("tpDelay20")?.classList.add("active");
+
+      // Mouse Sensitivity
+      const sens = settings.mouseSensitivity || 1.7;
+      const sSlider = document.getElementById("mouseSensSlider");
+      if (sSlider) sSlider.value = sens;
+      const sVal = document.getElementById("mouseSensVal");
+      if (sVal) sVal.innerText = sens.toFixed(1) + "x";
+
+      document.querySelectorAll("[id^=sens]").forEach(b => b.classList.remove("active"));
+      if (sens <= 1.0) document.getElementById("sensSlow")?.classList.add("active");
+      else if (sens >= 2.2) document.getElementById("sensFast")?.classList.add("active");
+      else document.getElementById("sensNormal")?.classList.add("active");
+
+      // Presets
+      document.querySelectorAll(".preset-chip").forEach(b => b.classList.remove("active"));
+      const preBtn = document.getElementById(`preset${settings.preset.charAt(0).toUpperCase() + settings.preset.slice(1)}`);
+      if (preBtn) preBtn.classList.add("active");
+
+      // Custom Freeform Positions
+      applyCustomPositions();
+    }
+
+    // ================= FREEFORM DRAG & DROP LAYOUT =================
+    let isLayoutEditMode = false;
+    let dragTarget = null;
+    let draftPositions = {};
+
+    function applyCustomPositions() {
+      const stage = document.getElementById("gamepadStage");
+      const posMap = settings.customPositions;
+      if (!posMap || Object.keys(posMap).length === 0) {
+        stage.classList.remove("has-custom-layout");
+        document.querySelectorAll("[data-cluster]").forEach(el => {
+          el.style.position = "";
+          el.style.left = "";
+          el.style.top = "";
+          el.style.transform = "";
+          el.style.margin = "";
+          el.style.zIndex = "";
+        });
+        return;
+      }
+
+      stage.classList.add("has-custom-layout");
+      for (const [id, pos] of Object.entries(posMap)) {
+        const el = document.querySelector(`[data-cluster="${id}"]`);
+        if (el) {
+          el.style.position = "absolute";
+          el.style.left = `${pos.x}%`;
+          el.style.top = `${pos.y}%`;
+          el.style.transform = "translate(-50%, -50%)";
+          el.style.margin = "0";
+          el.style.zIndex = "20";
+        }
+      }
+    }
+
+    function enterLayoutEditMode() {
+      haptic(30);
+      closeLayoutDrawer();
+      setMode("gamepad");
+      isLayoutEditMode = true;
+      document.body.classList.add("edit-layout-active");
+
+      // Copy current positions or measure existing ones
+      draftPositions = settings.customPositions ? { ...settings.customPositions } : {};
+      const stage = document.getElementById("gamepadStage");
+      const stageRect = stage.getBoundingClientRect();
+
+      document.querySelectorAll("[data-cluster]").forEach(el => {
+        const id = el.getAttribute("data-cluster");
+        if (!draftPositions[id]) {
+          const r = el.getBoundingClientRect();
+          const cx = r.left + r.width / 2;
+          const cy = r.top + r.height / 2;
+          draftPositions[id] = {
+            x: Math.round(((cx - stageRect.left) / stageRect.width) * 100),
+            y: Math.round(((cy - stageRect.top) / stageRect.height) * 100),
+          };
+        }
+      });
+      applyDraftPositions();
+    }
+
+    function applyDraftPositions() {
+      for (const [id, pos] of Object.entries(draftPositions)) {
+        const el = document.querySelector(`[data-cluster="${id}"]`);
+        if (el) {
+          el.style.position = "absolute";
+          el.style.left = `${pos.x}%`;
+          el.style.top = `${pos.y}%`;
+          el.style.transform = "translate(-50%, -50%)";
+          el.style.margin = "0";
+          el.style.zIndex = "30";
+        }
+      }
+    }
+
+    function exitLayoutEditMode(save = false) {
+      haptic(20);
+      isLayoutEditMode = false;
+      document.body.classList.remove("edit-layout-active");
+
+      if (save) {
+        settings.customPositions = { ...draftPositions };
+        saveSettings();
+      }
+      applyCustomPositions();
+    }
+
+    function resetCustomPositions() {
+      haptic(40);
+      settings.customPositions = null;
+      draftPositions = {};
+      saveSettings();
+      applyCustomPositions();
+      exitLayoutEditMode(false);
+    }
+
+    // Touch listeners for dragging clusters in Edit Mode
+    document.querySelectorAll("[data-cluster]").forEach(cluster => {
+      const id = cluster.getAttribute("data-cluster");
+
+      cluster.addEventListener("touchstart", (e) => {
+        if (!isLayoutEditMode) return;
+        e.stopPropagation();
+        dragTarget = { id, el: cluster };
+        haptic(15);
+      }, { passive: false });
+    });
+
+    const gamepadStage = document.getElementById("gamepadStage");
+
+    gamepadStage.addEventListener("touchmove", (e) => {
+      if (!isLayoutEditMode || !dragTarget) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const touch = e.touches[0];
+      const stageRect = gamepadStage.getBoundingClientRect();
+
+      const xPct = Math.max(8, Math.min(92, Math.round(((touch.clientX - stageRect.left) / stageRect.width) * 100)));
+      const yPct = Math.max(8, Math.min(92, Math.round(((touch.clientY - stageRect.top) / stageRect.height) * 100)));
+
+      draftPositions[dragTarget.id] = { x: xPct, y: yPct };
+      dragTarget.el.style.position = "absolute";
+      dragTarget.el.style.left = `${xPct}%`;
+      dragTarget.el.style.top = `${yPct}%`;
+      dragTarget.el.style.transform = "translate(-50%, -50%)";
+      dragTarget.el.style.zIndex = "40";
+    }, { passive: false });
+
+    gamepadStage.addEventListener("touchend", () => {
+      if (dragTarget) {
+        dragTarget = null;
+        haptic(10);
+      }
+    });
+
+    // Drag Lock State
+    let isDragLocked = false;
+    function toggleDragLock() {
+      if (isLayoutEditMode) return;
+      haptic();
+      isDragLocked = !isDragLocked;
+      const btn = document.getElementById("dragLockBtn");
+      const lbl = document.getElementById("dragLockLabel");
+      if (isDragLocked) {
+        btn.classList.add("active");
+        lbl.innerText = "DRAG ON";
+        send({ type: "mouse_down", btn: "left" });
+      } else {
+        btn.classList.remove("active");
+        lbl.innerText = "DRAG OFF";
+        send({ type: "mouse_up", btn: "left" });
+      }
+    }
+
+    // WebSocket Connection
+    let ws = null;
+    let pingInterval = null;
+    let lastPing = 0;
+
+    function connectWs() {
+      const loc = window.location;
+      const proto = loc.protocol === "https:" ? "wss:" : "ws:";
+      const url = `${proto}//${loc.host}/ws`;
+
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        document.getElementById("statusDot").classList.add("connected");
+        document.getElementById("pingLabel").innerText = "Online";
+        startPing();
+      };
+
+      ws.onclose = () => {
+        document.getElementById("statusDot").classList.remove("connected");
+        document.getElementById("pingLabel").innerText = "Reconnecting...";
+        stopPing();
+        setTimeout(connectWs, 1500);
+      };
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === "pong") {
+            const rtt = Math.round(performance.now() - lastPing);
+            document.getElementById("pingLabel").innerText = `${rtt} ms`;
+          } else if (msg.type === "profile_sync") {
+            activeProfileId = msg.active_profile_id;
+            activeProfileName = msg.active_profile_name || msg.active_profile_id;
+            availableProfiles = msg.profiles || [];
+            currentDeck = msg.deck || [];
+            renderProfileSelector();
+            renderActionDeck();
+          }
+        } catch (_) {}
+      };
+    }
+
+    function send(obj) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(obj));
+      }
+    }
+
+    function haptic(ms = 15) {
+      if (navigator.vibrate) {
+        if (Array.isArray(ms)) navigator.vibrate(ms);
+        else navigator.vibrate(ms);
+      }
+    }
+
+    function startPing() {
+      stopPing();
+      pingInterval = setInterval(() => {
+        lastPing = performance.now();
+        send({ type: "ping" });
+      }, 2000);
+    }
+    function stopPing() {
+      if (pingInterval) clearInterval(pingInterval);
+    }
+
+    // Fullscreen Handler
+    function toggleFullscreen() {
+      haptic();
+      const doc = document;
+      const docEl = document.documentElement;
+      const isFs = doc.fullscreenElement || doc.webkitFullscreenElement;
+
+      if (!isFs) {
+        if (docEl.requestFullscreen) docEl.requestFullscreen().catch(() => {});
+        else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+      } else {
+        if (doc.exitFullscreen) doc.exitFullscreen().catch(() => {});
+        else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+      }
+    }
+
+    document.addEventListener("fullscreenchange", updateFsIcon);
+    document.addEventListener("webkitfullscreenchange", updateFsIcon);
+
+    function updateFsIcon() {
+      const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+      const btn = document.getElementById("fsBtn");
+      const icon = document.getElementById("fsIcon");
+      if (isFs) {
+        btn.classList.add("active");
+        icon.innerHTML = `<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>`;
+      } else {
+        btn.classList.remove("active");
+        icon.innerHTML = `<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>`;
+      }
+    }
+
+    // Orientation Switcher
+    function toggleOrientation() {
+      haptic();
+      if (screen.orientation && screen.orientation.lock) {
+        if (screen.orientation.type.includes("portrait")) {
+          screen.orientation.lock("landscape").catch(() => {});
+        } else {
+          screen.orientation.lock("portrait").catch(() => {});
+        }
+      }
+    }
+
+    // Tab Navigation
+    function setMode(mode) {
+      if (isLayoutEditMode) exitLayoutEditMode(false);
+      document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".stage").forEach(s => s.classList.remove("active"));
+
+      if (mode === "gamepad") {
+        document.querySelectorAll(".mode-btn")[0].classList.add("active");
+        document.getElementById("gamepadStage").classList.add("active");
+      } else if (mode === "mouse") {
+        document.querySelectorAll(".mode-btn")[1].classList.add("active");
+        document.getElementById("mouseStage").classList.add("active");
+      } else {
+        document.querySelectorAll(".mode-btn")[2].classList.add("active");
+        document.getElementById("deckStage").classList.add("active");
+      }
+      haptic();
+    }
+
+    // ================= PROGRESSIVE TRIGGERS (LT & RT) =================
+    function setupTrigger(btnId, gaugeId, pctId, triggerName) {
+      const btn = document.getElementById(btnId);
+      const gauge = document.getElementById(gaugeId);
+      const pct = document.getElementById(pctId);
+
+      let animId = null;
+      let startTime = 0;
+      let currentVal = 0;
+
+      function updateGauge(val) {
+        const p = Math.round(val * 100);
+        gauge.style.height = `${p}%`;
+        pct.innerText = `${p}%`;
+      }
+
+      function rampStep(timestamp) {
+        if (!startTime) startTime = timestamp;
+        const elapsed = timestamp - startTime;
+        const rampDuration = settings.triggerRampMs || 700;
+        currentVal = Math.min(1.0, 0.1 + (elapsed / rampDuration) * 0.9);
+        updateGauge(currentVal);
+        send({ type: "trigger", trigger: triggerName, val: currentVal });
+
+        if (currentVal < 1.0) {
+          animId = requestAnimationFrame(rampStep);
+        }
+      }
+
+      btn.addEventListener("touchstart", (e) => {
+        if (isLayoutEditMode) return;
+        e.preventDefault();
+        haptic(10);
+        btn.classList.add("active");
+        startTime = 0;
+        currentVal = 0.1;
+        updateGauge(currentVal);
+        send({ type: "trigger", trigger: triggerName, val: currentVal });
+        animId = requestAnimationFrame(rampStep);
+      }, { passive: false });
+
+      btn.addEventListener("touchmove", (e) => {
+        if (isLayoutEditMode) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = btn.getBoundingClientRect();
+        const frac = Math.max(0, Math.min(1, (rect.bottom - touch.clientY) / rect.height));
+        currentVal = frac;
+        updateGauge(currentVal);
+        send({ type: "trigger", trigger: triggerName, val: currentVal });
+      }, { passive: false });
+
+      const release = (e) => {
+        if (isLayoutEditMode) return;
+        e.preventDefault();
+        btn.classList.remove("active");
+        if (animId) cancelAnimationFrame(animId);
+        currentVal = 0.0;
+        updateGauge(0);
+        send({ type: "trigger", trigger: triggerName, val: 0.0 });
+      };
+
+      btn.addEventListener("touchend", release, { passive: false });
+      btn.addEventListener("touchcancel", release, { passive: false });
+    }
+
+    setupTrigger("ltBtn", "ltGauge", "ltPct", "lt");
+    setupTrigger("rtBtn", "rtGauge", "rtPct", "rt");
+
+    // Standard Buttons (ABXY, D-Pad, LB, RB, Start, Back)
+    document.querySelectorAll("[data-btn]").forEach(btn => {
+      const bname = btn.getAttribute("data-btn");
+
+      btn.addEventListener("touchstart", (e) => {
+        if (isLayoutEditMode) return;
+        e.preventDefault();
+        haptic();
+        btn.classList.add("active");
+        send({ type: "btn_down", btn: bname });
+      }, { passive: false });
+
+      const release = (e) => {
+        if (isLayoutEditMode) return;
+        e.preventDefault();
+        btn.classList.remove("active");
+        send({ type: "btn_up", btn: bname });
+      };
+
+      btn.addEventListener("touchend", release, { passive: false });
+      btn.addEventListener("touchcancel", release, { passive: false });
+    });
+
+    // Virtual Joysticks with Stick Drag Option
+    let isStickAutoDragging = false;
+
+    function setupJoystick(baseId, puckId, isLeft) {
+      const base = document.getElementById(baseId);
+      const puck = document.getElementById(puckId);
+      let touchId = null;
+
+      base.addEventListener("touchstart", (e) => {
+        if (isLayoutEditMode) return;
+        e.preventDefault();
+        const touch = e.changedTouches[0];
+        touchId = touch.identifier;
+        move(touch.clientX, touch.clientY);
+      }, { passive: false });
+
+      base.addEventListener("touchmove", (e) => {
+        if (isLayoutEditMode) return;
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === touchId) {
+            move(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+            break;
+          }
+        }
+      }, { passive: false });
+
+      const reset = (e) => {
+        if (isLayoutEditMode) return;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === touchId) {
+            touchId = null;
+            puck.style.transform = `translate(0px, 0px)`;
+            puck.classList.remove("dragging");
+
+            send({ type: "axis", axis: isLeft ? "lx" : "rx", val: 0 });
+            send({ type: "axis", axis: isLeft ? "ly" : "ry", val: 0 });
+
+            if (isLeft && isStickAutoDragging) {
+              const dragBtn = settings.stickDragMode === "right" ? "right" : "left";
+              send({ type: "mouse_up", btn: dragBtn });
+              isStickAutoDragging = false;
+            }
+            break;
+          }
+        }
+      };
+
+      base.addEventListener("touchend", reset, { passive: false });
+      base.addEventListener("touchcancel", reset, { passive: false });
+
+      function move(cx, cy) {
+        const rect = base.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        let dx = cx - centerX;
+        let dy = cy - centerY;
+        const maxDist = rect.width / 2 - 10;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > maxDist) {
+          dx = (dx / dist) * maxDist;
+          dy = (dy / dist) * maxDist;
+        }
+
+        puck.style.transform = `translate(${dx}px, ${dy}px)`;
+        const normX = dx / maxDist;
+        const normY = -(dy / maxDist);
+
+        if (isLeft && (settings.stickDragMode === "left" || settings.stickDragMode === "right")) {
+          const dragBtn = settings.stickDragMode;
+          if (dist > 8 && !isStickAutoDragging) {
+            send({ type: "mouse_down", btn: dragBtn });
+            isStickAutoDragging = true;
+            puck.classList.add("dragging");
+          } else if (dist <= 8 && isStickAutoDragging) {
+            send({ type: "mouse_up", btn: dragBtn });
+            isStickAutoDragging = false;
+            puck.classList.remove("dragging");
+          }
+        }
+
+        send({ type: "axis", axis: isLeft ? "lx" : "rx", val: normX });
+        send({ type: "axis", axis: isLeft ? "ly" : "ry", val: normY });
+      }
+    }
+
+    setupJoystick("leftStickBase", "leftStickPuck", true);
+    setupJoystick("rightStickBase", "rightStickPuck", false);
+
+    // ================= TRACKPAD LOGIC & HOLD-TO-DRAG =================
+    const trackpad = document.getElementById("trackpad");
+    const trackpadBadge = document.getElementById("trackpadDragBadge");
+
+    let tpTouchStart = 0;
+    let tpLastX = 0;
+    let tpLastY = 0;
+    let tpStartX = 0;
+    let tpStartY = 0;
+    let tpMoved = false;
+
+    let tpDragTimer = null;
+    let tpIsDragging = false;
+
+    trackpad.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        tpTouchStart = performance.now();
+        tpLastX = e.touches[0].clientX;
+        tpLastY = e.touches[0].clientY;
+        tpStartX = tpLastX;
+        tpStartY = tpLastY;
+        tpMoved = false;
+        tpIsDragging = false;
+
+        // Start Hold-to-Drag timer (2 seconds by default, configurable)
+        if (tpDragTimer) clearTimeout(tpDragTimer);
+        const delay = settings.tpDragDelayMs || 2000;
+
+        tpDragTimer = setTimeout(() => {
+          // Held finger still for 2-3s -> Engaged Drag Mode!
+          tpIsDragging = true;
+          haptic([40, 50, 40]);
+          trackpad.classList.add("dragging-active");
+          trackpadBadge.classList.add("active");
+          send({ type: "mouse_down", btn: "left" });
+        }, delay);
+      }
+    }, { passive: false });
+
+    trackpad.addEventListener("touchmove", (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        const x = e.touches[0].clientX;
+        const y = e.touches[0].clientY;
+        const distFromStart = Math.hypot(x - tpStartX, y - tpStartY);
+
+        // If moved significantly before timer fired, cancel timer (it's normal cursor navigation)
+        if (!tpIsDragging && distFromStart > 12) {
+          if (tpDragTimer) {
+            clearTimeout(tpDragTimer);
+            tpDragTimer = null;
+          }
+        }
+
+        const sens = settings.mouseSensitivity || 1.7;
+        const dx = (x - tpLastX) * sens;
+        const dy = (y - tpLastY) * sens;
+        tpLastX = x;
+        tpLastY = y;
+
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+          tpMoved = true;
+          send({ type: "mouse_move", dx: Math.round(dx), dy: Math.round(dy) });
+        }
+      } else if (e.touches.length === 2) {
+        if (tpDragTimer) { clearTimeout(tpDragTimer); tpDragTimer = null; }
+        if (tpIsDragging) {
+          send({ type: "mouse_up", btn: "left" });
+          tpIsDragging = false;
+          trackpad.classList.remove("dragging-active");
+          trackpadBadge.classList.remove("active");
+        }
+        const dy = (e.touches[0].clientY - tpLastY) * 2;
+        tpLastY = e.touches[0].clientY;
+        send({ type: "mouse_scroll", dy: Math.round(dy * 10) });
+      }
+    }, { passive: false });
+
+    trackpad.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      if (tpDragTimer) {
+        clearTimeout(tpDragTimer);
+        tpDragTimer = null;
+      }
+
+      // If finger was holding and dragging, release the mouse button (rơi chuột)
+      if (tpIsDragging) {
+        send({ type: "mouse_up", btn: "left" });
+        tpIsDragging = false;
+        trackpad.classList.remove("dragging-active");
+        trackpadBadge.classList.remove("active");
+        haptic(25);
+        return;
+      }
+
+      // Quick tap -> Single Click
+      const dur = performance.now() - tpTouchStart;
+      if (!tpMoved && dur < 300) {
+        haptic();
+        send({ type: "mouse_click", btn: "left" });
+      }
+    }, { passive: false });
+
+    trackpad.addEventListener("touchcancel", (e) => {
+      if (tpDragTimer) { clearTimeout(tpDragTimer); tpDragTimer = null; }
+      if (tpIsDragging) {
+        send({ type: "mouse_up", btn: "left" });
+        tpIsDragging = false;
+        trackpad.classList.remove("dragging-active");
+        trackpadBadge.classList.remove("active");
+      }
+    });
+
+    // Trackpad Mouse Buttons
+    document.getElementById("mouseLeft").addEventListener("click", () => { haptic(); send({ type: "mouse_click", btn: "left" }); });
+    document.getElementById("mouseMiddle").addEventListener("click", () => { haptic(); send({ type: "mouse_click", btn: "middle" }); });
+    document.getElementById("mouseRight").addEventListener("click", () => { haptic(); send({ type: "mouse_click", btn: "right" }); });
+
+    // Dynamic Action Deck State & Synchronization
+    let currentDeck = [];
+    let availableProfiles = [];
+    let activeProfileId = "";
+    let activeProfileName = "";
+
+    function renderProfileSelector() {
+      const sel = document.getElementById("profileDropdown");
+      if (!sel) return;
+      sel.innerHTML = "";
+      if (!availableProfiles || availableProfiles.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = activeProfileId || "";
+        opt.textContent = activeProfileName || activeProfileId || "Default";
+        sel.appendChild(opt);
+        return;
+      }
+      availableProfiles.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.name;
+        if (p.id === activeProfileId) {
+          opt.selected = true;
+        }
+        sel.appendChild(opt);
+      });
+    }
+
+    function switchProfileFromDeck(profileId) {
+      if (!profileId || profileId === activeProfileId) return;
+      haptic();
+      send({ type: "switch_profile", profile_id: profileId });
+    }
+
+    function requestProfileSync() {
+      haptic();
+      send({ type: "get_profile" });
+    }
+
+    function renderActionDeck() {
+      const container = document.getElementById("dynamicDeckGrid");
+      if (!container) return;
+      container.innerHTML = "";
+
+      if (!currentDeck || currentDeck.length === 0) {
+        container.innerHTML = `
+          <div class="deck-empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="4" width="18" height="16" rx="2"/>
+              <path d="M7 8h.01M12 8h.01M17 8h.01M7 12h.01M12 12h.01M17 12h.01M7 16h10"/>
+            </svg>
+            <div class="empty-title">Chưa có Action Deck cho Profile này</div>
+            <div class="empty-desc">Profile hiện tại chưa thiết lập phím tắt riêng. Bạn có thể gán phím hoặc tạo macro trên máy tính để tự động hiện ở đây.</div>
+          </div>
+        `;
+        return;
+      }
+
+      // Group items by category (defaulting to "General")
+      const groups = {};
+      currentDeck.forEach(item => {
+        const cat = item.category || "General";
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(item);
+      });
+
+      Object.keys(groups).forEach(cat => {
+        const section = document.createElement("div");
+        section.className = "deck-category-block";
+
+        const title = document.createElement("div");
+        title.className = "deck-section-title";
+        title.textContent = cat;
+        section.appendChild(title);
+
+        const grid = document.createElement("div");
+        grid.className = "macro-grid";
+
+        groups[cat].forEach(item => {
+          const btn = document.createElement("button");
+          btn.className = "macro-btn";
+          if (item.color) {
+            btn.style.borderColor = item.color;
+          }
+          btn.onclick = () => triggerDeckItem(item.id);
+
+          const labelSpan = document.createElement("span");
+          labelSpan.className = "macro-name";
+          labelSpan.textContent = item.label;
+          btn.appendChild(labelSpan);
+
+          if (item.shortcut) {
+            const scSpan = document.createElement("span");
+            scSpan.className = "macro-key";
+            if (item.color) scSpan.style.color = item.color;
+            scSpan.textContent = item.shortcut;
+            btn.appendChild(scSpan);
+          }
+
+          grid.appendChild(btn);
+        });
+
+        section.appendChild(grid);
+        container.appendChild(section);
+      });
+    }
+
+    function triggerDeckItem(id) {
+      const item = currentDeck.find(d => d.id === id);
+      if (!item) return;
+      haptic(20);
+      send({ type: "deck_action", action: item.action });
+    }
+
+    function sendKey(key) {
+      haptic();
+      send({ type: "key_tap", key });
+    }
+    function sendCombo(key, mods) {
+      haptic();
+      send({ type: "key_combo", key, mods });
+    }
+    function sendText() {
+      const input = document.getElementById("textInput");
+      const text = input.value;
+      if (text) {
+        haptic();
+        send({ type: "text_input", text });
+        input.value = "";
+      }
+    }
+    document.getElementById("textInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendText();
+    });
+
+    // Layout Drawer Controls
+    function openLayoutDrawer() {
+      haptic();
+      document.getElementById("layoutModal").classList.add("active");
+    }
+    function closeLayoutDrawer(e) {
+      if (!e || e.target.id === "layoutModal" || e.target.classList.contains("drawer-close-btn")) {
+        haptic();
+        document.getElementById("layoutModal").classList.remove("active");
+      }
+    }
+
+    function applyPreset(name) {
+      haptic();
+      settings.preset = name;
+      settings.customPositions = null; // Clear custom when choosing preset
+      if (name === "wme") {
+        settings.scale = "medium";
+        settings.stickDragMode = "none";
+        settings.visShoulders = true;
+        settings.visDpad = true;
+        settings.visFace = true;
+        settings.visSticks = true;
+      } else if (name === "standard") {
+        settings.scale = "medium";
+        settings.stickDragMode = "none";
+        settings.visShoulders = true;
+        settings.visDpad = true;
+        settings.visFace = true;
+        settings.visSticks = true;
+      } else if (name === "split") {
+        setMode("mouse");
+      } else if (name === "minimal") {
+        settings.scale = "small";
+        settings.visShoulders = true;
+        settings.visDpad = false;
+        settings.visFace = true;
+        settings.visSticks = true;
+      }
+      saveSettings();
+      applyAllSettings();
+    }
+
+    function setScale(scale) {
+      haptic();
+      settings.scale = scale;
+      saveSettings();
+      applyAllSettings();
+    }
+
+    function toggleLefty(checked) {
+      haptic();
+      settings.lefty = checked;
+      saveSettings();
+      applyAllSettings();
+    }
+
+    function setStickDragMode(mode) {
+      haptic();
+      settings.stickDragMode = mode;
+      saveSettings();
+      applyAllSettings();
+    }
+
+    function setTriggerRamp(ms) {
+      haptic();
+      settings.triggerRampMs = ms;
+      saveSettings();
+      applyAllSettings();
+    }
+
+    function setTpDragDelay(ms) {
+      haptic();
+      settings.tpDragDelayMs = ms;
+      saveSettings();
+      applyAllSettings();
+    }
+
+    function setMouseSensitivity(val) {
+      settings.mouseSensitivity = Math.round(val * 10) / 10;
+      saveSettings();
+      applyAllSettings();
+      send({ type: "set_sensitivity", val: settings.mouseSensitivity });
+      haptic(10);
+    }
+
+    function toggleModuleVis(elemId, visible, shouldSave = true) {
+      const el = document.getElementById(elemId);
+      if (el) el.style.display = visible ? "" : "none";
+      if (shouldSave) {
+        if (elemId === "shouldersCluster") settings.visShoulders = visible;
+        if (elemId === "dpadCluster") settings.visDpad = visible;
+        if (elemId === "faceCluster") settings.visFace = visible;
+        if (elemId === "sticksCluster") settings.visSticks = visible;
+        saveSettings();
+      }
+    }
+
+    function resetDefaultLayout() {
+      haptic(30);
+      settings = {
+        preset: "wme",
+        scale: "medium",
+        lefty: false,
+        stickDragMode: "none",
+        triggerRampMs: 700,
+        tpDragDelayMs: 2000,
+        mouseSensitivity: 1.7,
+        visShoulders: true,
+        visDpad: true,
+        visFace: true,
+        visSticks: true,
+        customPositions: null,
+      };
+      saveSettings();
+      applyAllSettings();
+      closeLayoutDrawer({ target: { id: "layoutModal" } });
+    }
+
+    // Initialize
+    loadSettings();
+    connectWs();
+  </script>
+</body>
+</html>

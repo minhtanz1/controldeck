@@ -1,0 +1,17 @@
+---
+description: ControlDeck Developer and AI Rules
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# ControlDeck Project Rules
+
+## Architecture Highlights
+- `src/`: Svelte 5 desktop interface and `src/mobile/` companion controller.
+- `src-tauri/src/`: Rust backend implementing input mapping, window detection, and WebSocket server.
+- `src-tauri/src/server/dist-mobile/`: Embedded distribution of PocketPad mobile web app.
+
+## Token Optimization Best Practices
+- Never dump whole files into context.
+- Use `justless` or MCP graph tools (`search_graph`, `trace_path`) for targeted inspection.
+- Build frontend with `npm run build` before packaging Tauri.
